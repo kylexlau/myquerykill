@@ -18,7 +18,8 @@ def write_mail_content_html(filename, lockwaits, processlist, innodb_status_text
     border:0;
 }
 .mytable,.mytable th,.mytable td {
-    font-size:0.95em;
+    font-family: monospace;
+    font-size:large;
     text-align:left;
     padding:4px;
     border-collapse:collapse;

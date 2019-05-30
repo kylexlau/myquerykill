@@ -173,6 +173,9 @@ def kill_judge(row, kill_opt):
             return int(row[0])
         elif row[4] != 'Sleep':
             if 0 < int(kill_opt['k_longtime']) < row[5]:
+                # if row[1] not in settings.DB_AUTH.keys():
+                #     logger.warn("You may have set all users to kill, but %s is not in DB_AUTH list. Skip thread %d : %s ", row[1], row[0], row[7])
+                #     return 0
                 return int(row[0])
         return 0
     else:
@@ -315,7 +318,7 @@ def sendemail(db_id, dry_run, filename=''):
 
     message['From'] = mail_user
     message['To'] = Header('DBA', 'utf-8')
-    subject = '(%s) %s slow query has been take snapshot' % (mailenv, db_id)
+    subject = '%s-自愈脚本报警-%s' % (mailenv, db_id)
     message['Subject'] = Header(subject, 'utf-8')
     
     with open("var/processlist_"+db_id+'.txt', 'rb')as f:   
@@ -324,8 +327,8 @@ def sendemail(db_id, dry_run, filename=''):
     #            font-size:0.8em;    text-align:left;    padding:4px;    border-collapse:collapse;
     #        } </style>
     #	      """
-    message.attach(MIMEText('数据库活动线程较多，且有慢查询, threads <strong>' + dry_run + '</strong> <br/>' +  '<br/>You can find more info(snapshot) in the attachment : <strong> ' +
-                            filename + ' </strong> processlist:<br/> ' + "<br/>".join(filecontent), 'html', 'utf-8'))
+    message.attach(MIMEText('数据库活动线程较多，并出现慢查询, threads <strong>' + dry_run + '</strong> <br/>' +  '<br/>更多信息，请查看附件 : <strong> ' +
+                            filename + ' </strong> <br/><br/> 慢查询线程信息如下:<br/>' + ' '.join(filecontent), 'html', 'utf-8'))
     
     att2 = MIMEText(open(filename, 'rb').read(), 'base64', 'utf-8')
     att2["Content-Type"] = 'application/octet-stream'
@@ -439,9 +442,8 @@ def my_slowquery_kill(db_instance):
 
 # use multi-thread
 class myThread(threading.Thread):
-    def __init__(self, threadID, db_instance):
+    def __init__(self, db_instance):
         threading.Thread.__init__(self)
-        self.threadID = threadID
         self.name = db_instance[0]
 
     def run(self):
@@ -459,6 +461,6 @@ if __name__ == '__main__':
     # start keep-session-kill threads for every user and db_instance
     for db_instance in db_instances.items():
         # threadName like dbnqqame_user
-        thread_to_killquery = myThread(100, db_instance)
+        thread_to_killquery = myThread(db_instance)
         thread_to_killquery.start()
         time.sleep(0.8)
