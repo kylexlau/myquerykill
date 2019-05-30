@@ -23,7 +23,8 @@ from snapshot_report import write_mail_content_html
 
 LOG_FILE = 'killquery.log'
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+#logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 #handler = logging.handlers.RotatingFileHandler(LOG_FILE, maxBytes=1024*1024, backupCount=5)
 handler = TimedRotatingFileHandler(LOG_FILE, when='d', interval=1, backupCount=7)
 formatter = logging.Formatter('%(asctime)s [%(levelname)-7s] %(threadName)6s >> %(message)s')
@@ -33,7 +34,7 @@ logger.addHandler(handler)
 filterwarnings('ignore', category=MySQLdb.Warning) 
 
 THREAD_DATA = local()
-#KEY_DB_AUTH = "your_16_bytes_key"
+KEY_DB_AUTH = "your_16bytes_key"
 
 # get configuration section
 # db_commkill: common config and can be overwritten (inherit)
@@ -92,9 +93,12 @@ def get_processlist_kthreads(conn, kill_opt, db_id):
     try:
         cur = conn.cursor()
         sqlstr = "select * from information_schema.processlist order by time desc"
-
+        sqlstr1 = "select count(*) from information_schema.processlist where command != 'Sleep'"
         cur.execute(sqlstr)
         rs = cur.fetchall()
+
+        cur.execute(sqlstr1)
+        rs1 = cur.fetchall()
 
     except MySQLdb.Error, e:
         logger.critical("Get processlist connection error. Wait ping alive to reconnect.")
@@ -102,20 +106,18 @@ def get_processlist_kthreads(conn, kill_opt, db_id):
         fo = open(processlist_file, "w")
         fo.write("\n\n################  " + time.asctime() + "  ################\n")
         fo.write("""
-            <style> .mytable,.mytable th,.mytable td {
-                font-size:0.8em;    text-align:left;    padding:4px;    border-collapse:collapse;
-            } </style>
             <table class='mytable'> <tr><th>thread_id</th><th>user</th><th>host</th><th>db</th><th>command</th><th>time</th><th>state</th><th>info</th></tr> 
         """)
 
         logger.debug("check this conn thread according to kill_opt one by one")
-
-        for row in rs:
-            iskill_thread = kill_judge(row, kill_opt)
-            if iskill_thread > 0:
-                threads_tokill[row[1]].append(iskill_thread)
-
-                fo.write("<tr><td>" + "</td> <td>".join(map(str, row)) + "</td></tr>\n")
+        logger.debug("running threads is: %s", rs1[0][0])
+        logger.debug("running threads threshold is: %s", kill_opt['k_running'])
+        if rs1[0][0] > int(kill_opt['k_running']):
+            for row in rs:
+                iskill_thread = kill_judge(row, kill_opt)
+                if iskill_thread > 0:
+                    threads_tokill[row[1]].append(iskill_thread)
+                    fo.write("<tr><td>" + "</td> <td>".join(map(str, row)) + "</td></tr>\n")
             # print str(row)
         fo.write("</table>")
         fo.close()
@@ -171,9 +173,6 @@ def kill_judge(row, kill_opt):
             return int(row[0])
         elif row[4] != 'Sleep':
             if 0 < int(kill_opt['k_longtime']) < row[5]:
-                if row[1] not in settings.DB_AUTH.keys():
-                    logger.warn("You may have set all users to kill, but %s is not in DB_AUTH list. Skip thread %d : %s ", row[1], row[0], row[7])
-                    return 0
                 return int(row[0])
         return 0
     else:
@@ -314,23 +313,23 @@ def sendemail(db_id, dry_run, filename=''):
 
     message = MIMEMultipart()
 
-    message['From'] = Header('mysql', 'utf-8')
+    message['From'] = mail_user
     message['To'] = Header('DBA', 'utf-8')
     subject = '(%s) %s slow query has been take snapshot' % (mailenv, db_id)
     message['Subject'] = Header(subject, 'utf-8')
-
-    message.attach(MIMEText('db有慢查询, threads <strong>' + dry_run + '</strong> <br/>', 'html', 'utf-8'))
-    message.attach(MIMEText('<br/>You can find more info(snapshot) in the attachment : <strong> ' +
-                            filename + ' </strong> processlist:<br/><br/>', 'html', 'utf-8'))
-
-    with open("var/processlist_"+db_id+'.txt', 'rb')as f:
-    # with open(filename, 'rb')as f:
+    
+    with open("var/processlist_"+db_id+'.txt', 'rb')as f:   
         filecontent = f.readlines()
-    att1 = MIMEText("<br/>".join(filecontent), 'html', 'utf-8')
+    #styletext=""" <style> .mytable,.mytable th,.mytable td {
+    #            font-size:0.8em;    text-align:left;    padding:4px;    border-collapse:collapse;
+    #        } </style>
+    #	      """
+    message.attach(MIMEText('数据库活动线程较多，且有慢查询, threads <strong>' + dry_run + '</strong> <br/>' +  '<br/>You can find more info(snapshot) in the attachment : <strong> ' +
+                            filename + ' </strong> processlist:<br/> ' + "<br/>".join(filecontent), 'html', 'utf-8'))
+    
     att2 = MIMEText(open(filename, 'rb').read(), 'base64', 'utf-8')
     att2["Content-Type"] = 'application/octet-stream'
     att2["Content-Disposition"] = 'attachment; filename=%s' % filename
-    message.attach(att1)
     message.attach(att2)
 
     try:
