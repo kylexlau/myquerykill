@@ -21,7 +21,7 @@ from warnings import filterwarnings, resetwarnings
 from logging.handlers import TimedRotatingFileHandler
 from snapshot_report import write_mail_content_html
 
-LOG_FILE = 'killquery.log'
+LOG_FILE = 'var/killquery.log'
 logger = logging.getLogger(__name__)
 #logger.setLevel(logging.INFO)
 logger.setLevel(logging.DEBUG)
@@ -282,7 +282,7 @@ def kill_threads(threads_tokill, db_conns, db_id, db_commconfig):
                 sendemail(db_id, ' (' + u + ') KILLED', snapshot_html)
 
                 logger.info("(%s) run in dry_run=0 mode , do really kill, but the status snapshot is taken", u)
-                cur = db_conns[u].cursor()
+                cur = db_conns[process_user].cursor()
                 cur.execute(kill_str)
                 logger.warn("(%s) kill-command has been executed : %s", u, kill_str)
             except MySQLdb.Error, e:
